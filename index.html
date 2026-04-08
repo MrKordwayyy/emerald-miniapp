@@ -1,0 +1,368 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+<title>EmeraldMarket</title>
+<script src="https://telegram.org/js/telegram-web-app.js"></script>
+<style>
+:root {
+  --teal: #0D9B8A;
+  --emerald: #064E40;
+  --light-teal: #E0F5F2;
+  --text: #1A1A2E;
+  --text2: #6B7280;
+  --bg: #F7FAFA;
+  --white: #FFFFFF;
+  --radius: 14px;
+}
+* { margin:0; padding:0; box-sizing:border-box; }
+body {
+  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+  background: var(--bg);
+  color: var(--text);
+  padding-bottom: 70px;
+  min-height: 100vh;
+}
+.container { max-width: 480px; margin: 0 auto; padding: 16px; }
+
+/* Header */
+.header {
+  background: linear-gradient(135deg, var(--teal), var(--emerald));
+  color: white; padding: 20px 16px; text-align: center;
+  border-radius: 0 0 24px 24px;
+}
+.header h1 { font-size: 22px; font-weight: 700; }
+.header p { font-size: 13px; opacity: .85; margin-top: 4px; }
+
+/* Balance bar */
+.balance-bar {
+  display: flex; justify-content: space-between; align-items: center;
+  background: var(--white); border-radius: var(--radius); padding: 14px 16px;
+  margin: 12px 0; box-shadow: 0 2px 8px rgba(0,0,0,.06);
+}
+.balance-bar .label { font-size: 13px; color: var(--text2); }
+.balance-bar .value { font-size: 20px; font-weight: 700; color: var(--emerald); }
+
+/* Categories */
+.cats { display: flex; gap: 8px; overflow-x: auto; padding: 8px 0; }
+.cat-chip {
+  flex-shrink: 0; padding: 8px 16px; border-radius: 20px;
+  background: var(--white); border: 1.5px solid var(--light-teal);
+  font-size: 13px; font-weight: 600; cursor: pointer; transition: .2s;
+}
+.cat-chip.active, .cat-chip:active {
+  background: var(--teal); color: white; border-color: var(--teal);
+}
+
+/* Listing cards */
+.cards { display: flex; flex-direction: column; gap: 12px; margin-top: 12px; }
+.card {
+  background: var(--white); border-radius: var(--radius); padding: 16px;
+  box-shadow: 0 2px 8px rgba(0,0,0,.05); cursor: pointer; transition: .2s;
+}
+.card:active { transform: scale(.98); }
+.card .title { font-size: 16px; font-weight: 600; }
+.card .meta { font-size: 12px; color: var(--text2); margin-top: 4px; }
+.card .price { font-size: 18px; font-weight: 700; color: var(--teal); margin-top: 8px; }
+.card .seller-info { display: flex; align-items: center; gap: 6px; margin-top: 8px; font-size: 12px; color: var(--text2); }
+.trust-badge {
+  display: inline-block; padding: 2px 8px; border-radius: 10px; font-size: 11px;
+  font-weight: 700; background: var(--light-teal); color: var(--emerald);
+}
+.boost-badge {
+  display: inline-block; padding: 2px 6px; border-radius: 8px; font-size: 10px;
+  font-weight: 700; background: #FEF3C7; color: #92400E; margin-left: 6px;
+}
+
+/* Detail overlay */
+.overlay {
+  position: fixed; inset: 0; background: var(--bg); z-index: 100;
+  padding: 16px; overflow-y: auto; display: none;
+}
+.overlay.show { display: block; }
+.overlay .back { font-size: 14px; color: var(--teal); cursor: pointer; font-weight: 600; }
+.overlay h2 { margin-top: 12px; font-size: 20px; }
+.overlay .desc { margin-top: 10px; font-size: 14px; color: var(--text2); line-height: 1.5; }
+.btn {
+  display: block; width: 100%; padding: 14px; border: none; border-radius: var(--radius);
+  background: linear-gradient(135deg, var(--teal), var(--emerald));
+  color: white; font-size: 16px; font-weight: 700; cursor: pointer; margin-top: 20px;
+  text-align: center; transition: .2s;
+}
+.btn:active { opacity: .85; }
+.btn.secondary { background: var(--light-teal); color: var(--emerald); }
+
+/* Bottom nav */
+.nav {
+  position: fixed; bottom: 0; left: 0; right: 0; height: 60px;
+  background: var(--white); border-top: 1px solid #E5E7EB;
+  display: flex; justify-content: space-around; align-items: center; z-index: 50;
+}
+.nav-item { text-align: center; font-size: 10px; color: var(--text2); cursor: pointer; padding: 6px; }
+.nav-item.active { color: var(--teal); }
+.nav-item .icon { font-size: 22px; }
+
+/* Screens */
+.screen { display: none; }
+.screen.active { display: block; }
+
+/* Create form */
+.form-group { margin-bottom: 14px; }
+.form-group label { font-size: 13px; font-weight: 600; color: var(--text2); display: block; margin-bottom: 4px; }
+.form-group input, .form-group textarea, .form-group select {
+  width: 100%; padding: 12px; border: 1.5px solid #E5E7EB; border-radius: 10px;
+  font-size: 14px; outline: none; transition: .2s;
+}
+.form-group input:focus, .form-group textarea:focus { border-color: var(--teal); }
+
+.empty { text-align: center; padding: 40px 0; color: var(--text2); font-size: 14px; }
+</style>
+</head>
+<body>
+
+<div class="header">
+  <h1>🟢 EmeraldMarket</h1>
+  <p>P2P-маркетплейс с гарантом</p>
+</div>
+
+<!-- ═══ HOME ═══ -->
+<div id="screen-home" class="screen active">
+  <div class="container">
+    <div class="balance-bar">
+      <div><div class="label">Баланс</div><div class="value" id="bal">0 ⭐</div></div>
+      <div><div class="label">В холде</div><div class="value" id="bal-hold" style="color:var(--text2);font-size:15px">0 ⭐</div></div>
+    </div>
+    <div class="cats" id="cats"></div>
+    <div class="cards" id="listings"></div>
+  </div>
+</div>
+
+<!-- ═══ DETAIL ═══ -->
+<div id="screen-detail" class="overlay">
+  <div class="container">
+    <div class="back" onclick="showScreen('home')">← Назад</div>
+    <h2 id="det-title"></h2>
+    <div class="desc" id="det-desc"></div>
+    <div style="margin-top:14px">
+      <div class="seller-info">
+        <span id="det-seller"></span>
+        <span class="trust-badge" id="det-trust"></span>
+      </div>
+    </div>
+    <div class="price" id="det-price" style="font-size:22px;margin-top:14px;color:var(--teal);font-weight:700"></div>
+    <button class="btn" id="det-buy">⭐ Купить</button>
+  </div>
+</div>
+
+<!-- ═══ CREATE ═══ -->
+<div id="screen-create" class="screen">
+  <div class="container">
+    <h2 style="margin-bottom:16px">Новое объявление</h2>
+    <div class="form-group"><label>Название</label><input id="cr-title" placeholder="Аккаунт Genshin AR55"></div>
+    <div class="form-group"><label>Описание</label><textarea id="cr-desc" rows="3" placeholder="Подробное описание..."></textarea></div>
+    <div class="form-group"><label>Цена (Stars)</label><input id="cr-price" type="number" placeholder="100"></div>
+    <div class="form-group"><label>Категория</label><select id="cr-cat"></select></div>
+    <div class="form-group" style="display:flex;align-items:center;gap:8px">
+      <input id="cr-auto" type="checkbox" style="width:auto">
+      <label style="margin:0">Автовыдача</label>
+    </div>
+    <div class="form-group" id="cr-auto-wrap" style="display:none">
+      <label>Данные для автовыдачи</label>
+      <textarea id="cr-auto-data" rows="2" placeholder="Ключ / ссылка / данные аккаунта"></textarea>
+    </div>
+    <button class="btn" onclick="createListing()">Опубликовать</button>
+  </div>
+</div>
+
+<!-- ═══ PROFILE ═══ -->
+<div id="screen-profile" class="screen">
+  <div class="container">
+    <h2 style="margin-bottom:16px">Профиль</h2>
+    <div id="profile-info" class="empty">Загрузка...</div>
+  </div>
+</div>
+
+<!-- ═══ NAV ═══ -->
+<div class="nav">
+  <div class="nav-item active" onclick="showScreen('home')"><div class="icon">🏠</div>Главная</div>
+  <div class="nav-item" onclick="showScreen('create')"><div class="icon">➕</div>Продать</div>
+  <div class="nav-item" onclick="showScreen('profile')"><div class="icon">👤</div>Профиль</div>
+</div>
+
+<script>
+const tg = window.Telegram.WebApp;
+tg.ready();
+tg.expand();
+
+// ⚠️ ИЗМЕНИТЕ на URL вашего бэкенд-сервера (без / в конце)
+// Примеры:
+//   'https://your-vps.com'         — продакшен VPS
+//   'https://abc123.ngrok.io'      — ngrok для тестов
+const API = 'https://YOUR-BACKEND-URL';
+const AUTH = tg.initData;
+
+function headers() {
+  return { 'Content-Type': 'application/json', 'Authorization': AUTH };
+}
+
+async function api(path, opts = {}) {
+  const r = await fetch(API + path, { headers: headers(), ...opts });
+  return r.json();
+}
+
+// ── Screens ──
+function showScreen(name) {
+  document.querySelectorAll('.screen, .overlay').forEach(s => {
+    s.classList.remove('active');
+    s.classList.remove('show');
+  });
+  const el = document.getElementById('screen-' + name);
+  if (el.classList.contains('overlay')) el.classList.add('show');
+  else el.classList.add('active');
+
+  document.querySelectorAll('.nav-item').forEach((n, i) => {
+    n.classList.toggle('active', ['home','create','profile'][i] === name);
+  });
+
+  if (name === 'home') loadHome();
+  if (name === 'profile') loadProfile();
+}
+
+// ── Home ──
+let currentCat = null;
+
+async function loadHome() {
+  // balance
+  try {
+    const me = await api('/api/me');
+    document.getElementById('bal').textContent = Math.floor(me.balance) + ' ⭐';
+    document.getElementById('bal-hold').textContent = Math.floor(me.balance_hold) + ' ⭐';
+  } catch(e) {}
+
+  // categories
+  const cats = await api('/api/categories');
+  const catsEl = document.getElementById('cats');
+  catsEl.innerHTML = '<div class="cat-chip active" onclick="filterCat(null)">Все</div>';
+  cats.forEach(c => {
+    catsEl.innerHTML += `<div class="cat-chip" onclick="filterCat(${c.id})">${c.icon} ${c.name}</div>`;
+  });
+
+  await loadListings();
+}
+
+async function filterCat(id) {
+  currentCat = id;
+  document.querySelectorAll('.cat-chip').forEach((c, i) => {
+    c.classList.toggle('active', id === null ? i === 0 : false);
+  });
+  if (id !== null) event.target.classList.add('active');
+  await loadListings();
+}
+
+async function loadListings() {
+  let url = '/api/listings';
+  if (currentCat) url += '?category_id=' + currentCat;
+  const items = await api(url);
+  const el = document.getElementById('listings');
+  if (!items.length) { el.innerHTML = '<div class="empty">Пока нет объявлений</div>'; return; }
+  el.innerHTML = items.map(l => `
+    <div class="card" onclick="openDetail(${l.id})">
+      <div class="title">${esc(l.title)}${l.boosted ? '<span class="boost-badge">🔥 BOOST</span>' : ''}</div>
+      <div class="meta">${esc(l.description).slice(0,80)}</div>
+      <div class="price">${l.price_stars} ⭐</div>
+      <div class="seller-info">
+        ${esc(l.seller.display_name)}
+        <span class="trust-badge">TS ${Math.floor(l.seller.trust_score)}</span>
+      </div>
+    </div>
+  `).join('');
+}
+
+async function openDetail(id) {
+  const l = await api('/api/listings/' + id);
+  document.getElementById('det-title').textContent = l.title;
+  document.getElementById('det-desc').textContent = l.description;
+  document.getElementById('det-seller').textContent = l.seller.display_name;
+  document.getElementById('det-trust').textContent = 'TS ' + Math.floor(l.seller.trust_score);
+  document.getElementById('det-price').textContent = l.price_stars + ' ⭐';
+  document.getElementById('det-buy').onclick = () => buyListing(id, l.price_stars);
+  showScreen('detail');
+}
+
+async function buyListing(id, price) {
+  if (!confirm('Купить за ' + price + ' ⭐?')) return;
+  const r = await api('/api/listings/' + id + '/buy', { method: 'POST' });
+  if (r.error === 'insufficient_funds') {
+    tg.showAlert('Недостаточно средств! Нужно ' + r.need + '⭐, у вас ' + r.have + '⭐. Пополните через /deposit в боте.');
+    return;
+  }
+  if (r.error) { tg.showAlert('Ошибка: ' + r.error); return; }
+  let msg = 'Сделка #' + r.deal_id + ' создана и оплачена!';
+  if (r.auto_delivery_data) msg += '\n\nДанные: ' + r.auto_delivery_data;
+  tg.showAlert(msg);
+  showScreen('home');
+}
+
+// ── Create listing ──
+document.getElementById('cr-auto').onchange = function() {
+  document.getElementById('cr-auto-wrap').style.display = this.checked ? 'block' : 'none';
+};
+
+async function createListing() {
+  const body = {
+    title: document.getElementById('cr-title').value.trim(),
+    description: document.getElementById('cr-desc').value.trim(),
+    price_stars: parseFloat(document.getElementById('cr-price').value),
+    category_id: parseInt(document.getElementById('cr-cat').value) || null,
+    auto_delivery: document.getElementById('cr-auto').checked,
+    auto_delivery_data: document.getElementById('cr-auto-data').value.trim() || null,
+  };
+  if (!body.title || !body.price_stars) { tg.showAlert('Заполните название и цену'); return; }
+  const r = await api('/api/listings', { method: 'POST', body: JSON.stringify(body) });
+  if (r.error) { tg.showAlert('Ошибка: ' + r.error); return; }
+  tg.showAlert('Объявление #' + r.id + ' создано!');
+  showScreen('home');
+}
+
+// populate categories in create form
+(async () => {
+  const cats = await api('/api/categories');
+  const sel = document.getElementById('cr-cat');
+  sel.innerHTML = '<option value="">— Без категории —</option>';
+  cats.forEach(c => sel.innerHTML += `<option value="${c.id}">${c.icon} ${c.name}</option>`);
+})();
+
+// ── Profile ──
+async function loadProfile() {
+  try {
+    const me = await api('/api/me');
+    const level = me.trust_score >= 81 ? '🟢 Доверенный' :
+                  me.trust_score >= 61 ? '🔵 Надёжный' :
+                  me.trust_score >= 31 ? '🟡 Участник' : '⚪ Новичок';
+    document.getElementById('profile-info').innerHTML = `
+      <div style="text-align:left">
+        <h3>${esc(me.display_name)}</h3>
+        <p style="margin-top:10px;color:var(--text2)">Роль: ${me.role}</p>
+        <div class="balance-bar" style="margin-top:14px">
+          <div><div class="label">Баланс</div><div class="value">${Math.floor(me.balance)} ⭐</div></div>
+          <div><div class="label">В холде</div><div class="value" style="color:var(--text2);font-size:15px">${Math.floor(me.balance_hold)} ⭐</div></div>
+        </div>
+        <div style="margin-top:14px">
+          <p>📊 Trust Score: <b>${Math.floor(me.trust_score)}</b>/100 — ${level}</p>
+          <p style="margin-top:6px">📈 Сделок: ${me.total_deals} (успешных: ${me.successful_deals})</p>
+        </div>
+      </div>
+    `;
+  } catch(e) {
+    document.getElementById('profile-info').innerHTML = '<div class="empty">Ошибка загрузки</div>';
+  }
+}
+
+function esc(s) { const d = document.createElement('div'); d.textContent = s || ''; return d.innerHTML; }
+
+// init
+loadHome();
+</script>
+</body>
+</html>
