@@ -15,14 +15,13 @@
   --bg: #F7FAFA;
   --white: #FFFFFF;
   --radius: 14px;
+  --danger: #EF4444;
 }
 * { margin:0; padding:0; box-sizing:border-box; }
 body {
   font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
-  background: var(--bg);
-  color: var(--text);
-  padding-bottom: 70px;
-  min-height: 100vh;
+  background: var(--bg); color: var(--text);
+  padding-bottom: 70px; min-height: 100vh;
 }
 .container { max-width: 480px; margin: 0 auto; padding: 16px; }
 
@@ -43,6 +42,20 @@ body {
 }
 .balance-bar .label { font-size: 13px; color: var(--text2); }
 .balance-bar .value { font-size: 20px; font-weight: 700; color: var(--emerald); }
+
+.deposit-hint {
+  text-align: center; font-size: 12px; color: var(--teal);
+  margin-top: -4px; margin-bottom: 8px; cursor: pointer;
+}
+
+/* Error banner */
+.error-banner {
+  background: #FEF2F2; border: 1px solid #FECACA; color: #991B1B;
+  border-radius: 10px; padding: 12px; margin: 12px 0; font-size: 13px;
+  display: none;
+}
+.error-banner.show { display: block; }
+.error-banner code { background: #FEE2E2; padding: 2px 6px; border-radius: 4px; font-size: 11px; }
 
 /* Categories */
 .cats { display: flex; gap: 8px; overflow-x: auto; padding: 8px 0; }
@@ -112,11 +125,12 @@ body {
 .form-group label { font-size: 13px; font-weight: 600; color: var(--text2); display: block; margin-bottom: 4px; }
 .form-group input, .form-group textarea, .form-group select {
   width: 100%; padding: 12px; border: 1.5px solid #E5E7EB; border-radius: 10px;
-  font-size: 14px; outline: none; transition: .2s;
+  font-size: 14px; outline: none; transition: .2s; background: var(--white);
 }
 .form-group input:focus, .form-group textarea:focus { border-color: var(--teal); }
 
 .empty { text-align: center; padding: 40px 0; color: var(--text2); font-size: 14px; }
+.loader { text-align: center; padding: 30px; color: var(--text2); }
 </style>
 </head>
 <body>
@@ -129,12 +143,14 @@ body {
 <!-- ═══ HOME ═══ -->
 <div id="screen-home" class="screen active">
   <div class="container">
+    <div id="error-banner" class="error-banner"></div>
     <div class="balance-bar">
-      <div><div class="label">Баланс</div><div class="value" id="bal">0 ⭐</div></div>
-      <div><div class="label">В холде</div><div class="value" id="bal-hold" style="color:var(--text2);font-size:15px">0 ⭐</div></div>
+      <div><div class="label">Баланс</div><div class="value" id="bal">— ⭐</div></div>
+      <div><div class="label">В холде</div><div class="value" id="bal-hold" style="color:var(--text2);font-size:15px">— ⭐</div></div>
     </div>
+    <div class="deposit-hint" onclick="goDeposit()">💰 Пополнить баланс → в боте напишите /deposit</div>
     <div class="cats" id="cats"></div>
-    <div class="cards" id="listings"></div>
+    <div class="cards" id="listings"><div class="loader">Загрузка...</div></div>
   </div>
 </div>
 
@@ -179,7 +195,7 @@ body {
 <div id="screen-profile" class="screen">
   <div class="container">
     <h2 style="margin-bottom:16px">Профиль</h2>
-    <div id="profile-info" class="empty">Загрузка...</div>
+    <div id="profile-info"><div class="loader">Загрузка...</div></div>
   </div>
 </div>
 
@@ -191,33 +207,70 @@ body {
 </div>
 
 <script>
-const tg = window.Telegram.WebApp;
-tg.ready();
-tg.expand();
+// ═══════════════════════════════════════════════════════════════════════
+// КОНФИГУРАЦИЯ — ИЗМЕНИТЕ ЭТУ СТРОКУ!
+// ═══════════════════════════════════════════════════════════════════════
+// Укажите URL вашего бэкенд-сервера (без / в конце):
+//   Для ngrok:  'https://abc123.ngrok-free.app'
+//   Для VPS:    'https://api.yourdomain.com'
+//   Для теста на том же ПК: 'http://localhost:8080'
+const API_URL = 'https://YOUR-BACKEND-URL';
+// ═══════════════════════════════════════════════════════════════════════
 
-// ⚠️ ИЗМЕНИТЕ на URL вашего бэкенд-сервера (без / в конце)
-// Примеры:
-//   'https://your-vps.com'         — продакшен VPS
-//   'https://abc123.ngrok.io'      — ngrok для тестов
-const API = 'https://YOUR-BACKEND-URL';
-const AUTH = tg.initData;
+const tg = window.Telegram?.WebApp;
+if (tg) { tg.ready(); tg.expand(); }
 
-function headers() {
-  return { 'Content-Type': 'application/json', 'Authorization': AUTH };
+const AUTH = tg?.initData || '';
+let apiOk = true;
+
+function showError(msg) {
+  const el = document.getElementById('error-banner');
+  el.innerHTML = msg;
+  el.classList.add('show');
 }
 
+// ── API wrapper with error handling ──
 async function api(path, opts = {}) {
-  const r = await fetch(API + path, { headers: headers(), ...opts });
-  return r.json();
+  const url = API_URL + path;
+  try {
+    const r = await fetch(url, {
+      headers: { 'Content-Type': 'application/json', 'Authorization': AUTH },
+      ...opts,
+    });
+    if (!r.ok) {
+      const body = await r.json().catch(() => ({}));
+      return { _error: true, status: r.status, ...body };
+    }
+    return await r.json();
+  } catch (e) {
+    console.error('API error:', e);
+    if (API_URL.includes('YOUR-BACKEND-URL')) {
+      showError(
+        '⚠️ <b>API не настроен!</b><br><br>' +
+        'Откройте <code>index.html</code> и замените<br>' +
+        '<code>https://YOUR-BACKEND-URL</code><br>' +
+        'на адрес вашего сервера.<br><br>' +
+        'Например: <code>http://localhost:8080</code>'
+      );
+    } else {
+      showError(
+        '⚠️ Не удалось подключиться к серверу<br>' +
+        '<code>' + esc(API_URL) + '</code><br><br>' +
+        'Проверьте что <code>python main.py</code> запущен.'
+      );
+    }
+    apiOk = false;
+    return { _error: true, network: true };
+  }
 }
 
 // ── Screens ──
 function showScreen(name) {
   document.querySelectorAll('.screen, .overlay').forEach(s => {
-    s.classList.remove('active');
-    s.classList.remove('show');
+    s.classList.remove('active'); s.classList.remove('show');
   });
   const el = document.getElementById('screen-' + name);
+  if (!el) return;
   if (el.classList.contains('overlay')) el.classList.add('show');
   else el.classList.add('active');
 
@@ -231,33 +284,37 @@ function showScreen(name) {
 
 // ── Home ──
 let currentCat = null;
+let homeLoaded = false;
 
 async function loadHome() {
-  // balance
-  try {
-    const me = await api('/api/me');
+  // load balance
+  const me = await api('/api/me');
+  if (!me._error) {
     document.getElementById('bal').textContent = Math.floor(me.balance) + ' ⭐';
     document.getElementById('bal-hold').textContent = Math.floor(me.balance_hold) + ' ⭐';
-  } catch(e) {}
+  }
 
-  // categories
-  const cats = await api('/api/categories');
-  const catsEl = document.getElementById('cats');
-  catsEl.innerHTML = '<div class="cat-chip active" onclick="filterCat(null)">Все</div>';
-  cats.forEach(c => {
-    catsEl.innerHTML += `<div class="cat-chip" onclick="filterCat(${c.id})">${c.icon} ${c.name}</div>`;
-  });
+  // load categories (once)
+  if (!homeLoaded) {
+    const cats = await api('/api/categories');
+    if (!cats._error && Array.isArray(cats)) {
+      const catsEl = document.getElementById('cats');
+      catsEl.innerHTML = '<div class="cat-chip active" onclick="filterCat(null, this)">Все</div>';
+      cats.forEach(c => {
+        catsEl.innerHTML += `<div class="cat-chip" onclick="filterCat(${c.id}, this)">${esc(c.icon)} ${esc(c.name)}</div>`;
+      });
+    }
+    homeLoaded = true;
+  }
 
   await loadListings();
 }
 
-async function filterCat(id) {
+function filterCat(id, el) {
   currentCat = id;
-  document.querySelectorAll('.cat-chip').forEach((c, i) => {
-    c.classList.toggle('active', id === null ? i === 0 : false);
-  });
-  if (id !== null) event.target.classList.add('active');
-  await loadListings();
+  document.querySelectorAll('.cat-chip').forEach(c => c.classList.remove('active'));
+  if (el) el.classList.add('active');
+  loadListings();
 }
 
 async function loadListings() {
@@ -265,7 +322,14 @@ async function loadListings() {
   if (currentCat) url += '?category_id=' + currentCat;
   const items = await api(url);
   const el = document.getElementById('listings');
-  if (!items.length) { el.innerHTML = '<div class="empty">Пока нет объявлений</div>'; return; }
+  if (items._error) {
+    if (!items.network) el.innerHTML = '<div class="empty">Ошибка загрузки каталога</div>';
+    return;
+  }
+  if (!Array.isArray(items) || !items.length) {
+    el.innerHTML = '<div class="empty">Пока нет объявлений</div>';
+    return;
+  }
   el.innerHTML = items.map(l => `
     <div class="card" onclick="openDetail(${l.id})">
       <div class="title">${esc(l.title)}${l.boosted ? '<span class="boost-badge">🔥 BOOST</span>' : ''}</div>
@@ -281,6 +345,7 @@ async function loadListings() {
 
 async function openDetail(id) {
   const l = await api('/api/listings/' + id);
+  if (l._error) return;
   document.getElementById('det-title').textContent = l.title;
   document.getElementById('det-desc').textContent = l.description;
   document.getElementById('det-seller').textContent = l.seller.display_name;
@@ -293,14 +358,14 @@ async function openDetail(id) {
 async function buyListing(id, price) {
   if (!confirm('Купить за ' + price + ' ⭐?')) return;
   const r = await api('/api/listings/' + id + '/buy', { method: 'POST' });
-  if (r.error === 'insufficient_funds') {
-    tg.showAlert('Недостаточно средств! Нужно ' + r.need + '⭐, у вас ' + r.have + '⭐. Пополните через /deposit в боте.');
+  if (r._error && r.error === 'insufficient_funds') {
+    alert('Недостаточно средств! Нужно ' + r.need + '⭐, у вас ' + r.have + '⭐.\n\nПополните баланс в боте: /deposit ' + Math.ceil(r.need));
     return;
   }
-  if (r.error) { tg.showAlert('Ошибка: ' + r.error); return; }
+  if (r._error || r.error) { alert('Ошибка: ' + (r.error || 'неизвестная')); return; }
   let msg = 'Сделка #' + r.deal_id + ' создана и оплачена!';
   if (r.auto_delivery_data) msg += '\n\nДанные: ' + r.auto_delivery_data;
-  tg.showAlert(msg);
+  alert(msg);
   showScreen('home');
 }
 
@@ -318,50 +383,66 @@ async function createListing() {
     auto_delivery: document.getElementById('cr-auto').checked,
     auto_delivery_data: document.getElementById('cr-auto-data').value.trim() || null,
   };
-  if (!body.title || !body.price_stars) { tg.showAlert('Заполните название и цену'); return; }
+  if (!body.title || !body.price_stars) { alert('Заполните название и цену'); return; }
   const r = await api('/api/listings', { method: 'POST', body: JSON.stringify(body) });
-  if (r.error) { tg.showAlert('Ошибка: ' + r.error); return; }
-  tg.showAlert('Объявление #' + r.id + ' создано!');
+  if (r._error || r.error) { alert('Ошибка: ' + (r.error || 'не удалось создать')); return; }
+  alert('Объявление #' + r.id + ' создано!');
+  // reset form
+  document.getElementById('cr-title').value = '';
+  document.getElementById('cr-desc').value = '';
+  document.getElementById('cr-price').value = '';
   showScreen('home');
 }
 
 // populate categories in create form
 (async () => {
   const cats = await api('/api/categories');
+  if (cats._error || !Array.isArray(cats)) return;
   const sel = document.getElementById('cr-cat');
   sel.innerHTML = '<option value="">— Без категории —</option>';
-  cats.forEach(c => sel.innerHTML += `<option value="${c.id}">${c.icon} ${c.name}</option>`);
+  cats.forEach(c => sel.innerHTML += `<option value="${c.id}">${esc(c.icon)} ${esc(c.name)}</option>`);
 })();
 
 // ── Profile ──
 async function loadProfile() {
-  try {
-    const me = await api('/api/me');
-    const level = me.trust_score >= 81 ? '🟢 Доверенный' :
-                  me.trust_score >= 61 ? '🔵 Надёжный' :
-                  me.trust_score >= 31 ? '🟡 Участник' : '⚪ Новичок';
-    document.getElementById('profile-info').innerHTML = `
-      <div style="text-align:left">
-        <h3>${esc(me.display_name)}</h3>
-        <p style="margin-top:10px;color:var(--text2)">Роль: ${me.role}</p>
-        <div class="balance-bar" style="margin-top:14px">
-          <div><div class="label">Баланс</div><div class="value">${Math.floor(me.balance)} ⭐</div></div>
-          <div><div class="label">В холде</div><div class="value" style="color:var(--text2);font-size:15px">${Math.floor(me.balance_hold)} ⭐</div></div>
-        </div>
-        <div style="margin-top:14px">
-          <p>📊 Trust Score: <b>${Math.floor(me.trust_score)}</b>/100 — ${level}</p>
-          <p style="margin-top:6px">📈 Сделок: ${me.total_deals} (успешных: ${me.successful_deals})</p>
-        </div>
-      </div>
-    `;
-  } catch(e) {
-    document.getElementById('profile-info').innerHTML = '<div class="empty">Ошибка загрузки</div>';
+  const el = document.getElementById('profile-info');
+  const me = await api('/api/me');
+  if (me._error) {
+    if (me.status === 401) {
+      el.innerHTML = '<div class="empty">⚠️ Откройте маркетплейс через бота в Telegram,<br>чтобы профиль загрузился.</div>';
+    } else {
+      el.innerHTML = '<div class="empty">Ошибка загрузки профиля</div>';
+    }
+    return;
   }
+  const level = me.trust_score >= 81 ? '🟢 Доверенный' :
+                me.trust_score >= 61 ? '🔵 Надёжный' :
+                me.trust_score >= 31 ? '🟡 Участник' : '⚪ Новичок';
+  el.innerHTML = `
+    <div style="text-align:left">
+      <h3>${esc(me.display_name)}</h3>
+      <p style="margin-top:10px;color:var(--text2)">Роль: ${esc(me.role)}</p>
+      <div class="balance-bar" style="margin-top:14px">
+        <div><div class="label">Баланс</div><div class="value">${Math.floor(me.balance)} ⭐</div></div>
+        <div><div class="label">В холде</div><div class="value" style="color:var(--text2);font-size:15px">${Math.floor(me.balance_hold)} ⭐</div></div>
+      </div>
+      <div class="deposit-hint" onclick="goDeposit()">💰 Пополнить → в боте: /deposit</div>
+      <div style="margin-top:14px">
+        <p>📊 Trust Score: <b>${Math.floor(me.trust_score)}</b>/100 — ${level}</p>
+        <p style="margin-top:6px">📈 Сделок: ${me.total_deals} (успешных: ${me.successful_deals})</p>
+      </div>
+    </div>
+  `;
+}
+
+function goDeposit() {
+  if (tg) { tg.close(); }
+  // user goes back to bot and types /deposit or presses button
 }
 
 function esc(s) { const d = document.createElement('div'); d.textContent = s || ''; return d.innerHTML; }
 
-// init
+// ── Init ──
 loadHome();
 </script>
 </body>
